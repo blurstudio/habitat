@@ -33,8 +33,8 @@ class DistroFinderS3Zip(DistroFinderCloudZip):
           `DistroVersion` returned by `self.distro` without being written to disk.
     """
 
-    def __init__(self, root, site=None, safe=False, client=None, profile_name=None):
-        self.profile_name = profile_name
+    def __init__(self, root, site=None, safe=False, client=None, **client_kwargs):
+        self.client_kwargs = client_kwargs
         super().__init__(root, site=site, safe=safe, client=client)
 
     @property
@@ -42,9 +42,7 @@ class DistroFinderS3Zip(DistroFinderCloudZip):
         try:
             return self._client
         except AttributeError:
-            kwargs = {}
-            if self.profile_name:
-                kwargs["profile_name"] = self.profile_name
+            kwargs = self.client_kwargs
             if self.site:
                 kwargs["local_cache_dir"] = self.site.downloads["cache_root"]
             else:

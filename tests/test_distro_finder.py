@@ -1,5 +1,6 @@
 import glob
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -137,7 +138,7 @@ class CheckDistroFinder:
         assert finder.installed(distro_folder)
 
     def check_install(self, a_distro_finder, helpers, tmp_path):
-        resolver = self.create_resolver(a_distro_finder.root, helpers, tmp_path)
+        resolver = self.create_resolver(a_distro_finder.zip_root, helpers, tmp_path)
         dl_finder = resolver.site.downloads["distros"][0]
         assert isinstance(dl_finder, self.distro_finder_cls)
         install_root = resolver.site.downloads["install_root"]
@@ -187,7 +188,7 @@ class TestDistroFinder(CheckDistroFinder):
 
 
 class TestZipSidecar(CheckDistroFinder):
-    """Tests specific to `DistroFinderZip`."""
+    """Tests specific to `DistroFinderZipSidecar`."""
 
     distro_finder_cls = zip_sidecar.DistroFinderZipSidecar
     site_template = "site_distro_zip_sidecar.json"
@@ -291,6 +292,24 @@ class TestZip(CheckDistroFinder):
 
     def test_install(self, zip_distro, helpers, tmp_path):
         self.check_install(zip_distro, helpers, tmp_path)
+
+
+# These tests only work if using the `pyXX-s3` tox testing env
+@pytest.mark.skipif(
+    not os.getenv("VIRTUAL_ENV", "").endswith("-s3"),
+    reason="not testing optional s3 cloud",
+)
+class TestS3(CheckDistroFinder):
+    """Tests specific to `DistroFinderS3Zip`."""
+
+    distro_finder_cls = df_zip.DistroFinderZip
+    site_template = "site_distro_s3.json"
+
+    def test_installed(self, zip_distro_s3, helpers, tmp_path):
+        self.check_installed(zip_distro_s3, helpers, tmp_path)
+
+    def test_install(self, zip_distro_s3, helpers, tmp_path):
+        self.check_install(zip_distro_s3, helpers, tmp_path)
 
 
 # TODO: Break this into separate smaller tests of components for each class not this

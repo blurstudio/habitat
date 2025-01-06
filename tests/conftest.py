@@ -118,7 +118,7 @@ def resolver(request):
 Distro = namedtuple("Distro", ["name", "version", "inc_version", "distros"])
 
 
-class DistroInfo(namedtuple("DistroInfo", ["root", "versions"])):
+class DistroInfo(namedtuple("DistroInfo", ["root", "versions", "zip_root"])):
     default_versions = (
         ("dist_a", "0.1", True, None),
         ("dist_a", "0.2", False, ["dist_b"]),
@@ -141,9 +141,11 @@ class DistroInfo(namedtuple("DistroInfo", ["root", "versions"])):
         return json.dumps(data, indent=4)
 
     @classmethod
-    def generate(cls, root, versions=None, zip_created=None):
+    def generate(cls, root, versions=None, zip_created=None, zip_root=None):
         if versions is None:
             versions = cls.default_versions
+        if zip_root is None:
+            zip_root = root
 
         versions = {(x[0], x[1]): Distro(*x) for x in versions}
 
@@ -166,7 +168,7 @@ class DistroInfo(namedtuple("DistroInfo", ["root", "versions"])):
         with ZipFile(root / "not_valid_v0.1.zip", "w") as zf:
             zf.writestr("README.txt", "This file is not a hab distro zip.")
 
-        return cls(root, versions)
+        return cls(root, versions, zip_root)
 
 
 @pytest.fixture(scope="session")
@@ -196,7 +198,7 @@ def zip_distro(tmp_path_factory):
     .. _HTTP range requests:
        https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests
     """
-    root = tmp_path_factory.mktemp("_zip_distro")
+    root = tmp_path_factory.mktemp("_zip_distro_files")
     return DistroInfo.generate(root)
 
 
@@ -207,7 +209,7 @@ def zip_distro_sidecar(tmp_path_factory):
 
     This is useful when your hab download server does not support HTTP range requests.
     """
-    root = tmp_path_factory.mktemp("_zip_distro_sidecar")
+    root = tmp_path_factory.mktemp("_zip_distro_sidecar_files")
 
     def zip_created(zf):
         """Extract the .hab.json from the zip to a sidecar file."""
@@ -217,6 +219,32 @@ def zip_distro_sidecar(tmp_path_factory):
         shutil.move(path, sidecar)
 
     return DistroInfo.generate(root, zip_created=zip_created)
+
+
+@pytest.fixture(scope="session")
+def _zip_distro_s3(tmp_path_factory):
+    """The files used by `zip_distro_s3` only generated once per test."""
+    root = tmp_path_factory.mktemp("_zip_distro_s3_files")
+    bucket_root = root / "hab-test-bucket"
+    bucket_root.mkdir()
+    return DistroInfo.generate(bucket_root, zip_root=root)
+
+
+@pytest.fixture()
+def zip_distro_s3(_zip_distro_s3, monkeypatch):
+    """Returns a DistroInfo instance for a s3 zip cloud based folder structure.
+
+    This is used to simulate using an aws s3 cloud storage bucket to host hab
+    distro zip files.
+    """
+    from cloudpathlib import implementation_registry
+    from cloudpathlib.local import LocalS3Client, local_s3_implementation
+
+    from hab.distro_finders import s3_zip
+
+    monkeypatch.setitem(implementation_registry, "s3", local_s3_implementation)
+    monkeypatch.setattr(s3_zip, "S3Client", LocalS3Client)
+    return _zip_distro_s3
 
 
 class Helpers(object):
